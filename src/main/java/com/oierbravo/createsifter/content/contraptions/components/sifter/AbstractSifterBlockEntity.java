@@ -43,11 +43,19 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.WeakHashMap;
+
+import net.minecraft.world.item.crafting.Ingredient;
 
 public abstract class AbstractSifterBlockEntity extends KineticBlockEntity implements IHaveGoggleInformation, DynamicCycleBehavior.DynamicCycleBehaviorSpecifics, RecipeRequirementsBehaviour.RecipeRequirementsSpecifics<SiftingRecipe> {
+
+    private static final Set<AbstractSifterBlockEntity> LOADED_SIFTERS =
+            Collections.newSetFromMap(new WeakHashMap<>());
 
     public float DEFAULT_MINIMUM_SPEED;
 
@@ -67,6 +75,9 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
     protected DeployerFakePlayer player;
 
     protected UUID owner;
+
+    /** Rebuilt when mesh, waterlogging, or recipes change; hot path only runs {@link Ingredient#test}. */
+    private List<Ingredient> acceptedInputsCache = List.of();
 
     protected abstract boolean isValidMesh(ItemStack meshStack);
 
@@ -93,6 +104,25 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
         super.initialize();
         initHandler();
     }
+
+    @Override
+    public void onLoad() {
+        super.onLoad();
+        if (level != null && !level.isClientSide) {
+            LOADED_SIFTERS.add(this);
+            rebuildAcceptedInputsCache();
+        }
+    }
+
+    @Override
+    public void setBlockState(BlockState state) {
+        BlockState previous = getBlockState();
+        super.setBlockState(state);
+        if (level == null || level.isClientSide || previous == null)
+            return;
+        if (previous.getValue(BlockStateProperties.WATERLOGGED) != state.getValue(BlockStateProperties.WATERLOGGED))
+            rebuildAcceptedInputsCache();
+    }
     private void initHandler() {
         if (level instanceof ServerLevel sLevel) {
             player = new DeployerFakePlayer(sLevel, owner);
@@ -109,6 +139,7 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
 
             @Override
             protected void onContentsChanged(int slot) {
+                rebuildAcceptedInputsCache();
                 sendData();
             }
         };
@@ -117,7 +148,7 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
     protected ItemStackHandler createInputInventory(){
         return new ItemStackHandler(1){
             public boolean isItemValid(int slot, @NotNull ItemStack stack) {
-                return hasMesh();
+                return acceptsInput(stack);
             }
             @Override
             protected void onContentsChanged(int slot) {
@@ -157,6 +188,7 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
 
     @Override
     public void invalidate() {
+        LOADED_SIFTERS.remove(this);
         super.invalidate();
         invalidateCapabilities();
     }
@@ -262,6 +294,8 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
         meshInventory.deserializeNBT(registries, compound.getCompound("MeshInventory"));
         if (compound.contains("Owner"))
             owner = compound.getUUID("Owner");
+        if (!clientPacket)
+            rebuildAcceptedInputsCache();
         super.read(compound, registries, clientPacket);
 
     }
@@ -298,6 +332,7 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
             removeMesh(player);
         }
         meshInventory.setStackInSlot(0, meshToInsert);
+        rebuildAcceptedInputsCache();
         setChanged();
 
         return true;
@@ -318,6 +353,7 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
         player.getInventory().placeItemBackInInventory(meshInventory.getStackInSlot(0));
         meshInventory.setStackInSlot(0, ItemStack.EMPTY);
         minimumSpeed = getDefaultMinimumSpeed();
+        rebuildAcceptedInputsCache();
         sendData();
     }
 
@@ -333,6 +369,40 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
         return this.inputInventory.getStackInSlot(0);
     }
 
+    public boolean acceptsInput(ItemStack stack) {
+        if (stack.isEmpty() || !hasMesh())
+            return false;
+        for (Ingredient ingredient : acceptedInputsCache) {
+            if (ingredient.test(stack))
+                return true;
+        }
+        return false;
+    }
+
+    protected void rebuildAcceptedInputsCache() {
+        if (level == null || level.isClientSide || !hasMesh()) {
+            acceptedInputsCache = List.of();
+            return;
+        }
+        acceptedInputsCache = SiftingRecipeManager.getAcceptedInputs(level, getMeshItemStack(), isWaterlogged(),
+                isAdvancedSifter());
+    }
+
+    public static void rebuildAllAcceptedInputCaches() {
+        for (AbstractSifterBlockEntity sifter : LOADED_SIFTERS) {
+            if (!sifter.isRemoved())
+                sifter.rebuildAcceptedInputsCache();
+        }
+    }
+
+    protected boolean hasFreeOutputSlot() {
+        for (int slot = 0; slot < outputInventory.getSlots(); slot++) {
+            ItemStack stack = outputInventory.getStackInSlot(slot);
+            if (stack.isEmpty() || stack.getCount() < stack.getMaxStackSize())
+                return true;
+        }
+        return false;
+    }
 
     @Override
     @OnlyIn(Dist.CLIENT)
@@ -350,7 +420,7 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
 
     @Override
     public boolean hasEnoughOutputSpace(SiftingRecipe siftingRecipe) {
-        return true;
+        return hasFreeOutputSlot();
     }
 
     @Override
@@ -378,6 +448,8 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
                 return false;
             if (meshInventory == getHandlerFromIndex(getIndexForSlot(slot)))
                 return MeshUtils.isMeshItem(stack);
+            if (inputInventory == getHandlerFromIndex(getIndexForSlot(slot)))
+                return acceptsInput(stack);
             return super.isItemValid(slot, stack);
         }
 

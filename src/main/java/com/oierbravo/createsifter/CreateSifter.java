@@ -15,11 +15,14 @@ import net.createmod.catnip.lang.FontHelper;
 import net.createmod.ponder.foundation.PonderIndex;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.CreativeModeTab;
+import com.oierbravo.createsifter.content.contraptions.components.sifter.AbstractSifterBlockEntity;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.ModLoadingContext;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.OnDatapackSyncEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -62,7 +65,14 @@ public class CreateSifter {
 
         modEventBus.addListener(this::registerCapabilities);
         modEventBus.addListener(this::doClientStuff);
+        NeoForge.EVENT_BUS.addListener(CreateSifter::onDatapackSync);
         generateLangEntries();
+    }
+
+    private static void onDatapackSync(OnDatapackSyncEvent event) {
+        if (event.getPlayer().level().isClientSide())
+            return;
+        AbstractSifterBlockEntity.rebuildAllAcceptedInputCaches();
     }
     private void generateLangEntries(){
         new RegistrateLangBuilder<>(MODID, registrate())
