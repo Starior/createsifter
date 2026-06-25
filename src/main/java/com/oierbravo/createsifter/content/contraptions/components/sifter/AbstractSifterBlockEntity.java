@@ -43,6 +43,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
+import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -56,6 +57,9 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
 
     private static final Set<AbstractSifterBlockEntity> LOADED_SIFTERS =
             Collections.newSetFromMap(new WeakHashMap<>());
+    private static final Set<AbstractSifterBlockEntity> PENDING_REBUILD_SET =
+            Collections.newSetFromMap(new WeakHashMap<>());
+    private static final ArrayDeque<AbstractSifterBlockEntity> PENDING_REBUILD_QUEUE = new ArrayDeque<>();
 
     public float DEFAULT_MINIMUM_SPEED;
 
@@ -189,6 +193,7 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
     @Override
     public void invalidate() {
         LOADED_SIFTERS.remove(this);
+        PENDING_REBUILD_SET.remove(this);
         super.invalidate();
         invalidateCapabilities();
     }
@@ -396,8 +401,26 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
     public static void rebuildAllAcceptedInputCaches() {
         for (AbstractSifterBlockEntity sifter : LOADED_SIFTERS) {
             if (!sifter.isRemoved())
-                sifter.rebuildAcceptedInputsCache();
+                enqueueAcceptedInputsRebuild(sifter);
         }
+    }
+
+    public static void processPendingAcceptedInputCacheRebuilds(int maxPerTick) {
+        int budget = Math.max(0, maxPerTick);
+        for (int i = 0; i < budget; i++) {
+            AbstractSifterBlockEntity sifter = PENDING_REBUILD_QUEUE.pollFirst();
+            if (sifter == null)
+                break;
+            PENDING_REBUILD_SET.remove(sifter);
+            if (sifter.isRemoved() || sifter.level == null || sifter.level.isClientSide)
+                continue;
+            sifter.rebuildAcceptedInputsCache();
+        }
+    }
+
+    private static void enqueueAcceptedInputsRebuild(AbstractSifterBlockEntity sifter) {
+        if (PENDING_REBUILD_SET.add(sifter))
+            PENDING_REBUILD_QUEUE.addLast(sifter);
     }
 
     protected boolean hasFreeOutputSlot() {

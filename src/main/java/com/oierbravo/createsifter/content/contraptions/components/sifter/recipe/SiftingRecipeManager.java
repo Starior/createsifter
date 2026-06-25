@@ -19,10 +19,12 @@ import java.util.WeakHashMap;
 
 public class SiftingRecipeManager {
     private record RecipeLookupKey(Item inputItem, Item meshItem, boolean waterlogged, boolean advanced) {}
+    private record AcceptedInputsKey(Item meshItem, boolean waterlogged, boolean advanced) {}
 
     private record WinnerCache(
             Map<RecipeLookupKey, SiftingRecipe> regularWinners,
-            Map<RecipeLookupKey, SiftingRecipe> advancedWinners
+            Map<RecipeLookupKey, SiftingRecipe> advancedWinners,
+            Map<AcceptedInputsKey, List<Ingredient>> acceptedInputsByKey
     ) {}
 
     private static final Map<Level, WinnerCache> WINNER_CACHE = new WeakHashMap<>();
@@ -40,15 +42,7 @@ public class SiftingRecipeManager {
         RecipeLookupKey key = toLookupKey(SiftingRecipeInput.fromSifter(sifter), sifter.isWaterlogged(), sifter.isAdvancedSifter());
         if (key == null)
             return Optional.empty();
-        WinnerCache cache = getOrBuildWinnerCache(level);
-
-        boolean advanced = sifter.isAdvancedSifter();
-        if (advanced) {
-            SiftingRecipe advancedRecipe = cache.advancedWinners().get(key);
-            if (advancedRecipe != null)
-                return Optional.of(advancedRecipe);
-        }
-        return Optional.ofNullable(cache.regularWinners().get(key));
+        return getWinnerForKey(level, key, sifter.isAdvancedSifter());
     }
 
     public static Optional<SiftingRecipe> getRecipeForHandSifting(Level level, SiftingRecipeInput input,
@@ -58,7 +52,7 @@ public class SiftingRecipeManager {
         RecipeLookupKey key = toLookupKey(input, waterlogged, false);
         if (key == null)
             return Optional.empty();
-        return Optional.ofNullable(getOrBuildWinnerCache(level).regularWinners().get(key));
+        return getWinnerForKey(level, key, false);
     }
 
     public static List<RecipeHolder<SiftingRecipe>> getRecipesMatchingIngredients(SiftingRecipeInput input, Level level) {
@@ -87,20 +81,9 @@ public class SiftingRecipeManager {
             boolean advancedSifter) {
         if (level == null || mesh.isEmpty())
             return List.of();
-
-        List<Ingredient> ingredients = new ArrayList<>();
-        for (RecipeHolder<SiftingRecipe> holder : level.getRecipeManager()
-                .getAllRecipesFor(SiftingRecipe.Type.INSTANCE)) {
-            SiftingRecipe recipe = holder.value();
-            if (!ItemStack.isSameItem(recipe.getMesh(), mesh))
-                continue;
-            if (recipe.isWaterlogged() != waterlogged)
-                continue;
-            if (recipe.requiresAdvancedSifter() && !advancedSifter)
-                continue;
-            ingredients.add(recipe.getInput());
-        }
-        return ingredients;
+        AcceptedInputsKey key = new AcceptedInputsKey(mesh.getItem(), waterlogged, advancedSifter);
+        List<Ingredient> cachedInputs = getOrBuildWinnerCache(level).acceptedInputsByKey().get(key);
+        return cachedInputs != null ? cachedInputs : List.of();
     }
 
     public static boolean isAcceptedInput(Level level, ItemStack mesh, boolean waterlogged, boolean advancedSifter,
@@ -134,6 +117,7 @@ public class SiftingRecipeManager {
     private static WinnerCache buildWinnerCache(Level level) {
         Map<RecipeLookupKey, SiftingRecipe> regularWinners = new HashMap<>();
         Map<RecipeLookupKey, SiftingRecipe> advancedWinners = new HashMap<>();
+        Map<AcceptedInputsKey, List<Ingredient>> acceptedInputsByKey = new HashMap<>();
         List<RecipeHolder<SiftingRecipe>> allRecipes = level.getRecipeManager().getAllRecipesFor(SiftingRecipe.Type.INSTANCE);
 
         for (RecipeHolder<SiftingRecipe> holder : allRecipes) {
@@ -144,6 +128,18 @@ public class SiftingRecipeManager {
             Item meshItem = recipe.getMesh().getItem();
             boolean waterlogged = recipe.isWaterlogged();
             boolean requiresAdvanced = recipe.requiresAdvancedSifter();
+            AcceptedInputsKey regularInputsKey = new AcceptedInputsKey(meshItem, waterlogged, false);
+            AcceptedInputsKey advancedInputsKey = new AcceptedInputsKey(meshItem, waterlogged, true);
+
+            if (requiresAdvanced) {
+                acceptedInputsByKey.computeIfAbsent(advancedInputsKey, ignored -> new ArrayList<>())
+                        .add(recipe.getInput());
+            } else {
+                acceptedInputsByKey.computeIfAbsent(regularInputsKey, ignored -> new ArrayList<>())
+                        .add(recipe.getInput());
+                acceptedInputsByKey.computeIfAbsent(advancedInputsKey, ignored -> new ArrayList<>())
+                        .add(recipe.getInput());
+            }
 
             for (ItemStack candidateInput : recipe.getInput().getItems()) {
                 if (candidateInput.isEmpty())
@@ -160,7 +156,8 @@ public class SiftingRecipeManager {
                 }
             }
         }
-        return new WinnerCache(regularWinners, advancedWinners);
+        acceptedInputsByKey.replaceAll((key, inputs) -> List.copyOf(inputs));
+        return new WinnerCache(regularWinners, advancedWinners, acceptedInputsByKey);
     }
 
     private static RecipeLookupKey toLookupKey(SiftingRecipeInput input, boolean waterlogged, boolean advanced) {
@@ -181,5 +178,17 @@ public class SiftingRecipeManager {
         if (candidate.getId() == null)
             return existing;
         return candidate.getId().compareTo(existing.getId()) < 0 ? candidate : existing;
+    }
+
+    private static Optional<SiftingRecipe> getWinnerForKey(Level level, RecipeLookupKey key, boolean advanced) {
+        WinnerCache cache = getOrBuildWinnerCache(level);
+        SiftingRecipe winner = null;
+        if (advanced) {
+            winner = cache.advancedWinners().get(key);
+        }
+        if (winner == null) {
+            winner = cache.regularWinners().get(key);
+        }
+        return Optional.ofNullable(winner);
     }
 }

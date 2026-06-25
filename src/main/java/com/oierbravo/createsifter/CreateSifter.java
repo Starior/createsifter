@@ -24,6 +24,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.OnDatapackSyncEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -32,6 +33,7 @@ import static com.oierbravo.createsifter.ModConstants.MODID;
 
 @Mod(MODID)
 public class CreateSifter {
+    private static final int ACCEPTED_INPUT_REBUILD_BATCH_PER_TICK = 128;
     // Directly reference a log4j logger.
     private static final Logger LOGGER = LogManager.getLogger(MODID);
     public static IEventBus modEventBus;
@@ -67,6 +69,7 @@ public class CreateSifter {
         modEventBus.addListener(this::registerCapabilities);
         modEventBus.addListener(this::doClientStuff);
         NeoForge.EVENT_BUS.addListener(CreateSifter::onDatapackSync);
+        NeoForge.EVENT_BUS.addListener(CreateSifter::onServerTickPost);
         generateLangEntries();
     }
 
@@ -76,6 +79,10 @@ public class CreateSifter {
         SiftingRecipeManager.clearLookupCache();
         SiftingRecipeManager.rebuildLookupCache(event.getPlayer() != null ? event.getPlayer().level() : null);
         AbstractSifterBlockEntity.rebuildAllAcceptedInputCaches();
+    }
+
+    private static void onServerTickPost(ServerTickEvent.Post event) {
+        AbstractSifterBlockEntity.processPendingAcceptedInputCacheRebuilds(ACCEPTED_INPUT_REBUILD_BATCH_PER_TICK);
     }
     private void generateLangEntries(){
         new RegistrateLangBuilder<>(MODID, registrate())
