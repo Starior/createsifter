@@ -6,7 +6,7 @@ import org.jetbrains.annotations.NotNull;
 public class BrassSifterConfigs extends ConfigBase {
 
     public final ConfigInt outputCapacity = i(16,1,"outputCapacity", Comments.outputCapacity);
-    public final ConfigInt itemsPerCycle = i(8,1,"outputCapacity", Comments.itemsPerCycle);
+    public final ConfigInt itemsPerCycle = i(8,1,"itemsPerCycle", Comments.itemsPerCycle);
 
 
     private static class Comments {

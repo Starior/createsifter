@@ -221,15 +221,23 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
             return true;
 
         ItemStack stackInSlot = inputInventory.getStackInSlot(0);
+        boolean processedAny = false;
         for(int i = 0;i <getItemsPerCycle();i++){
-            if(!stackInSlot.isEmpty()) {
-                stackInSlot.shrink(1);
-                inputInventory.setStackInSlot(0, stackInSlot);
+            if(stackInSlot.isEmpty())
+                break;
 
-                siftingRecipe.rollResults(level.random)
-                        .forEach(stack -> tryToInsertOutputItem(outputInventory, stack, false));
-            }
+            List<ItemStack> rolledResults = siftingRecipe.rollResults(level.random);
+            if (!canFullyInsertOutputs(outputInventory, rolledResults))
+                break;
+
+            stackInSlot.shrink(1);
+            inputInventory.setStackInSlot(0, stackInSlot);
+            insertOutputs(outputInventory, rolledResults);
+            processedAny = true;
         }
+        if(!processedAny)
+            return false;
+
         if(MConfigs.server().mesh.useMeshDurabilityWithSifter.get()){
             ItemStack meshStack = getMeshInventory().getStackInSlot(0);
             player.setItemInHand(InteractionHand.MAIN_HAND, meshStack.copy());
@@ -254,8 +262,8 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
         return recipe;
     }
 
-    protected void tryToInsertOutputItem(ItemStackHandler outputInv,ItemStack stack, boolean simulate){
-        ItemHandlerHelper.insertItemStacked(outputInv, stack, simulate);
+    protected ItemStack tryToInsertOutputItem(ItemStackHandler outputInv, ItemStack stack, boolean simulate){
+        return ItemHandlerHelper.insertItemStacked(outputInv, stack, simulate);
     }
     protected int getItemsProcessedPerCycle(){
         return itemsProcessedPerCycle;
@@ -421,6 +429,36 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
     private static void enqueueAcceptedInputsRebuild(AbstractSifterBlockEntity sifter) {
         if (PENDING_REBUILD_SET.add(sifter))
             PENDING_REBUILD_QUEUE.addLast(sifter);
+    }
+
+    private boolean canFullyInsertOutputs(ItemStackHandler outputInv, List<ItemStack> outputs) {
+        if (outputs.isEmpty())
+            return true;
+        ItemStackHandler simulatedOutput = copyInventory(outputInv);
+        for (ItemStack output : outputs) {
+            if (output.isEmpty())
+                continue;
+            ItemStack remainder = tryToInsertOutputItem(simulatedOutput, output.copy(), false);
+            if (!remainder.isEmpty())
+                return false;
+        }
+        return true;
+    }
+
+    private void insertOutputs(ItemStackHandler outputInv, List<ItemStack> outputs) {
+        for (ItemStack output : outputs) {
+            if (output.isEmpty())
+                continue;
+            tryToInsertOutputItem(outputInv, output.copy(), false);
+        }
+    }
+
+    private ItemStackHandler copyInventory(ItemStackHandler source) {
+        ItemStackHandler copy = new ItemStackHandler(source.getSlots());
+        for (int slot = 0; slot < source.getSlots(); slot++) {
+            copy.setStackInSlot(slot, source.getStackInSlot(slot).copy());
+        }
+        return copy;
     }
 
     protected boolean hasFreeOutputSlot() {
