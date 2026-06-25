@@ -2,6 +2,7 @@ package com.oierbravo.createsifter;
 
 import com.oierbravo.createsifter.content.contraptions.components.sifter.andesite.SifterBlockEntity;
 import com.oierbravo.createsifter.content.contraptions.components.sifter.brass.BrassSifterBlockEntity;
+import com.oierbravo.createsifter.content.contraptions.components.sifter.recipe.SiftingRecipeManager;
 import com.oierbravo.createsifter.infrastucture.config.MConfigs;
 import com.oierbravo.createsifter.infrastucture.data.ModDataGen;
 import com.oierbravo.createsifter.ponders.ModPonderPlugin;
@@ -70,8 +71,10 @@ public class CreateSifter {
     }
 
     private static void onDatapackSync(OnDatapackSyncEvent event) {
-        if (event.getPlayer().level().isClientSide())
+        if (event.getPlayer() != null && event.getPlayer().level().isClientSide())
             return;
+        SiftingRecipeManager.clearLookupCache();
+        SiftingRecipeManager.rebuildLookupCache(event.getPlayer() != null ? event.getPlayer().level() : null);
         AbstractSifterBlockEntity.rebuildAllAcceptedInputCaches();
     }
     private void generateLangEntries(){

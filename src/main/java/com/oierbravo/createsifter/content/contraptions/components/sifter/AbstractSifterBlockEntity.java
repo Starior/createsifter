@@ -201,12 +201,11 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
             recipeRequirementsBehaviour.cleanRequirements();
             return false;
         }
+        SiftingRecipe siftingRecipe = recipe.get();
 
-        if(!isSpeedRequirementFulfilled()){
+        if(!isSpeedRequirementFulfilled(siftingRecipe)){
             return false;
         }
-
-        SiftingRecipe siftingRecipe = recipe.get();
 
         if(!recipeRequirementsBehaviour.checkRequirements(siftingRecipe))
             return false;
@@ -304,10 +303,16 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
         Optional<SiftingRecipe> recipe = getRecipe();
         if(recipe.isEmpty())
             return getAbsSpeed() >= minimumSpeed;
-        if(recipe.get().getRequirement(MechanicalRecipeRequirementTypes.MIN_SPEED.get()).isPresent())
-            return recipe.get().getRequirement(MechanicalRecipeRequirementTypes.MIN_SPEED.get()).get().test(level, this);
-        if(recipe.get().getRequirement(MechanicalRecipeRequirementTypes.MAX_SPEED.get()).isPresent())
-            return recipe.get().getRequirement(MechanicalRecipeRequirementTypes.MAX_SPEED.get()).get().test(level, this);
+        return isSpeedRequirementFulfilled(recipe.get());
+    }
+
+    private boolean isSpeedRequirementFulfilled(SiftingRecipe recipe) {
+        var minSpeedRequirement = recipe.getRequirement(MechanicalRecipeRequirementTypes.MIN_SPEED.get());
+        if(minSpeedRequirement.isPresent())
+            return minSpeedRequirement.get().test(level, this);
+        var maxSpeedRequirement = recipe.getRequirement(MechanicalRecipeRequirementTypes.MAX_SPEED.get());
+        if(maxSpeedRequirement.isPresent())
+            return maxSpeedRequirement.get().test(level, this);
         return super.isSpeedRequirementFulfilled();
     }
 
@@ -430,9 +435,10 @@ public abstract class AbstractSifterBlockEntity extends KineticBlockEntity imple
 
     @Override
     public int getProcessingTime() {
-        if(getRecipe().isEmpty())
+        Optional<SiftingRecipe> recipe = getRecipe();
+        if(recipe.isEmpty())
             return 1;
-        return getRecipe().get().getProcessingTime();
+        return recipe.get().getProcessingTime();
     }
 
 
