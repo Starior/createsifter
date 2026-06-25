@@ -12,7 +12,7 @@ import net.minecraft.world.item.crafting.RecipeHolder;
 
 import java.util.List;
 
-import static com.oierbravo.createsifter.content.contraptions.components.sifter.recipe.SiftingRecipeManager.getRecipesMerged;
+import static com.oierbravo.createsifter.content.contraptions.components.sifter.recipe.SiftingRecipeManager.getAllHolders;
 
 @EmiEntrypoint
 public class CreteSifterEMI implements EmiPlugin {
@@ -27,8 +27,8 @@ public class CreteSifterEMI implements EmiPlugin {
 
         registry.addWorkstation(SIFTING_CATEGORY, SIFTER);
         registry.addWorkstation(SIFTING_CATEGORY, BRASS_SIFTER);
-        List<RecipeHolder<SiftingRecipe>> mergedRecipes = getRecipesMerged();
-        for(RecipeHolder<SiftingRecipe> recipeHolder: mergedRecipes){
+        List<RecipeHolder<SiftingRecipe>> allRecipes = getAllHolders();
+        for (RecipeHolder<SiftingRecipe> recipeHolder : allRecipes) {
             registry.addRecipe(new SiftingEmiRecipe(recipeHolder.value(), recipeHolder.id()));
         }
     }

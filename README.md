@@ -54,8 +54,13 @@ Heavily inspired on ex nihilo sieve.
 - `"advancedSifter":"true"`
 - Recipes can require brass sifter for normal meshes too.
 
-### Compact recipes.
-- Recipes with same mesh and input block gets merged allowing easier compat.
+### Duplicate recipes (same mesh and input)
+
+- If more than one sifting recipe matches the same input, mesh, and waterlogged flag, **only one** is used in-game and in JEI: the recipe with the **smallest recipe id** (namespace/path string order). Others are ignored for that block.
+- Avoid defining two recipes for the same combination unless you intend one to win; merge loot in a **single** recipe JSON instead.
+
+### Datapack compat recipes (separate ids)
+
 - Current mods:
   - EnderIO
   - Ars nouveau

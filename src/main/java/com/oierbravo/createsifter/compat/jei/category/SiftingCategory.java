@@ -34,7 +34,7 @@ public class SiftingCategory extends CreateRecipeCategory<SiftingRecipe> {
     @SuppressWarnings("unchecked")
     public final static CreateRecipeCategory<SiftingRecipe> INFO = CreateRecipeCategoryBuilder
             .builder(SiftingRecipe.class)
-            .addRecipes(SiftingRecipeManager::getRecipesMerged)
+            .addRecipes(SiftingRecipeManager::getAllHolders)
             .catalyst(ModBlocks.SIFTER)
             .catalyst(ModBlocks.BRASS_SIFTER)
             .icon(new ItemIcon(() -> new ItemStack(ModBlocks.SIFTER.asItem())))
