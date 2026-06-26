@@ -53,11 +53,21 @@ public class BrassSifterBlockEntity extends AbstractSifterBlockEntity {
         behaviours.add(filtering);
     }
 
+    @Override
+    public boolean acceptsInput(ItemStack stack) {
+        if (filtering != null && filtering.isActive() && !filtering.test(stack))
+            return false;
+        return super.acceptsInput(stack);
+    }
+
 
     @Override
     public boolean tryProcess(boolean simulate) {
         if (getBlockState().getOptionalValue(BlockStateProperties.POWERED)
                 .orElse(false))
+            return false;
+        ItemStack inputStack = getInputItemStack();
+        if (!inputStack.isEmpty() && filtering != null && filtering.isActive() && !filtering.test(inputStack))
             return false;
         return super.tryProcess(simulate);
     }
